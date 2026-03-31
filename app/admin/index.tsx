@@ -65,43 +65,55 @@ export default function AdminPanel() {
 async function saveCourseSettings() {
   if (!editingCourse) return;
 
-  console.log("Сохраняем курс:", editingCourse.id);
-  console.log("Выбранный преподаватель:", selectedLecturerId);
-
   try {
-    const { data, error } = await supabase
+    setLoading(true);
+
+    // 1. Сначала обновляем лектора в таблице courses
+    const { error: courseError } = await supabase
       .from('courses')
       .update({
-        lecturer_id: selectedLecturerId, // может быть null — это нормально
-        available_slots: courseSlots
+        lecturer_id: selectedLecturerId,
+        // Мы все еще можем писать в available_slots для подстраховки, 
+        // но основное время теперь будет в другой таблице
+        available_slots: courseSlots 
       })
-      .eq('id', editingCourse.id)
-      .select(); // 👈 чтобы увидеть, что реально сохранилось
+      .eq('id', editingCourse.id);
 
-    if (error) {
-      console.error("Supabase error:", error);
-      Alert.alert("Ошибка базы", error.message);
-      return;
+    if (courseError) throw courseError;
+
+    // 2. УДАЛЯЕМ старые слоты для этого курса, чтобы записать новые 
+    // (это проще, чем искать какие изменились)
+    const { error: deleteError } = await supabase
+      .from('course_slots')
+      .delete()
+      .eq('course_id', editingCourse.id);
+
+    if (deleteError) throw deleteError;
+
+    // 3. ЗАПИСЫВАЕМ новые слоты в таблицу course_slots
+    if (courseSlots.length > 0) {
+      const slotsToInsert = courseSlots.map(slot => ({
+        course_id: editingCourse.id,
+        lecturer_id: selectedLecturerId,
+        slot: slot
+      }));
+
+      const { error: insertError } = await supabase
+        .from('course_slots')
+        .insert(slotsToInsert);
+
+      if (insertError) throw insertError;
     }
 
-    console.log("Обновлённые данные:", data);
-
-    if (!data || data.length === 0) {
-      Alert.alert("Ой", "Ничего не обновилось. Проверь RLS и права доступа.");
-      return;
-    }
-
-    Alert.alert("Готово!", "Курс обновлён");
-
+    Alert.alert("Готово!", "Курс и слоты обновлены во всех таблицах");
     setEditingCourse(null);
-    setSelectedLecturerId(null);
-    setCourseSlots([]);
-
     fetchData();
 
   } catch (err: any) {
-    console.error("Unexpected error:", err);
-    Alert.alert("Ошибка", err.message || "Неизвестная ошибка");
+    console.error("Save error:", err);
+    Alert.alert("Ошибка сохранения", err.message);
+  } finally {
+    setLoading(false);
   }
 }
 

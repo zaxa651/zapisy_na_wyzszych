@@ -37,15 +37,13 @@ export default function RegisterScreen() {
     // 2. Создаём запись в public.profiles с выбранной ролью
     if (data.user) {
       const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([
-          { 
-            id: data.user.id, 
-            email: email, 
-            full_name: fullName,
-            role: selectedRole   // ← сохраняем выбранную роль
-          }
-        ]);
+  .from('profiles')
+  .upsert({ 
+    id: data.user.id, 
+    email: email, 
+    full_name: fullName,
+    role: selectedRole 
+  });
 
       if (profileError) {
         console.error("Profile creation error:", profileError.message);

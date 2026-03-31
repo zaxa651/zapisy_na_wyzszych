@@ -20,224 +20,263 @@ export default function CoursesScreen() {
   const router = useRouter();
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Используем ref чтобы значение всегда было актуальным внутри колбэков
   const currentUserIdRef = useRef<string | null>(null);
   const [enrolledCourseIds, setEnrolledCourseIds] = useState<Set<string>>(new Set());
   const [selectedSlots, setSelectedSlots] = useState<Record<string, string>>({});
   const [enrollingIds, setEnrollingIds] = useState<Set<string>>(new Set());
   const [slotModalCourse, setSlotModalCourse] = useState<any | null>(null);
 
-  // Refs для закрытия свайпа после действия
   const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
 
-  // Роли
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLecturer, setIsLecturer] = useState(false);
 
-  // Новое состояние: карта преподавателей id -> full_name
-  const [lecturersMap, setLecturersMap] = useState<Record<string, string>>({});
+  const [lecturersMap, setLecturersMap] = useState<Record<string, any>>({});
 
-  // Модалки и состояния для предложений
   const [proposeModalCourse, setProposeModalCourse] = useState<any | null>(null);
   const [newSlotText, setNewSlotText] = useState<string>('');
   const [proposingIds, setProposingIds] = useState<Set<string>>(new Set());
 
-  // Админ: список предложений
   const [proposals, setProposals] = useState<any[]>([]);
   const [proposalsModalVisible, setProposalsModalVisible] = useState(false);
   const [processingProposalIds, setProcessingProposalIds] = useState<Set<string>>(new Set());
 
- useEffect(() => {
-  (async () => {
-    setLoading(true);
-    
-    // Сначала получаем ID пользователя — это MUST BE FIRST
-    await fetchCurrentUser(); // ← здесь currentUserIdRef.current устанавливается
-    
-    // Затем проверяем роль
-    await checkRole();
-    
-    // Только после этого загружаем курсы (с учётом роли)
-    if (isLecturer && currentUserIdRef.current) {
-      await fetchCourses(); // ← в этом блоке используется currentUserIdRef.current
-    } else {
-      await fetchCourses(); // и для других ролей тоже — но внутри fetchCourses уже есть фильтрация
-    }
+  useEffect(() => {
+    initializeScreen();
+  }, []);
 
-    // Остальные данные (записи, преподаватели и т.д.)
-    await Promise.all([
-      fetchMyEnrollments(),
-      fetchLecturers()
-    ]);
-
-    if (isAdmin) {
-      await fetchProposals();
-    }
-
-    setLoading(false);
-  })();
-}, []);
-
-
-  async function getUserRole() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user?.id) return null;
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
-
-    if (error) {
-      console.error('Role fetch error:', error);
-      return null;
-    }
-
-    return data.role;
-  }
-
-  // Получаем auth.uid()
-  async function fetchCurrentUser() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user?.id) {
-      currentUserIdRef.current = session.user.id;
-    }
-  }
-
-  // Устанавливаем isAdmin и isLecturer
-  async function checkRole() {
-    const role = await getUserRole();
-    setIsAdmin(role === 'admin');
-    setIsLecturer(role === 'lecturer');
-  }
-
-  /**
-   * Основное изменение: если пользователь — преподаватель,
-   * делаем серверный запрос только по его lecturer_id.
-   */
-  async function fetchCourses() {
+  async function initializeScreen() {
     try {
-      // Если преподаватель — фильтруем на сервере
-      if (isLecturer && currentUserIdRef.current) {
-        const { data, error } = await supabase
-          .from('courses')
-          .select(`
-            id,
-            title,
-            description,
-            available_slots,
-            lecturer_id
-          `)
-          .eq('lecturer_id', currentUserIdRef.current)
-          .order('created_at', { ascending: false });
+      setLoading(true);
+      setError(null);
 
-        if (error) {
-          console.error('fetchCourses (lecturer) error:', error);
-          Alert.alert("Ошибка", "Не удалось загрузить ваши курсы");
-        } else {
-          setCourses(data || []);
-        }
+      await fetchCurrentUser();
+      
+      if (!currentUserIdRef.current) {
+        setError('Пользователь не авторизован');
+        setLoading(false);
         return;
       }
 
-      // Для остальных ролей (admin, student и т.д.) — обычный запрос
-      const { data, error } = await supabase
-        .from('courses')
-        .select(`
+      const role = await getUserRole();
+      console.log('User role:', role);
+      
+      setIsAdmin(role === 'admin');
+      setIsLecturer(role === 'lecturer');
+
+      await loadAllData(role);
+
+    } catch (err: any) {
+      console.error('Initialization error:', err);
+      setError(err.message || 'Ошибка при загрузке данных');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadAllData(role?: string | null) {
+    try {
+      await Promise.all([
+        fetchCourses(role),
+        fetchMyEnrollments(),
+        fetchLecturers()
+      ]);
+
+      if (role === 'admin') {
+        await fetchProposals();
+      }
+    } catch (err) {
+      console.error('Error loading data:', err);
+      throw err;
+    }
+  }
+
+  async function getUserRole() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user?.id) {
+        return null;
+      }
+
+      const { data: profileData, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (error) {
+        console.error('Role fetch error:', error);
+        return null;
+      }
+
+      return profileData?.role || 'student';
+    } catch (err) {
+      console.error('getUserRole error:', err);
+      return null;
+    }
+  }
+
+  async function fetchCurrentUser() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user?.id) {
+        currentUserIdRef.current = session.user.id;
+        console.log('Current user ID:', currentUserIdRef.current);
+      }
+    } catch (err) {
+      console.error('fetchCurrentUser error:', err);
+    }
+  }
+
+async function fetchCourses(role?: string | null) {
+  try {
+    const lecturerMode = role === 'lecturer';
+    console.log('Fetching courses, mode:', lecturerMode ? 'lecturer' : 'student/admin');
+
+    // 1. Делаем ОДИН запрос со вложенными данными
+    let query = supabase
+      .from('courses')
+      .select(`
+        id, 
+        title, 
+        description, 
+        lecturer_id, 
+        created_at,
+        course_slots (
           id,
-          title,
-          description,
-          available_slots,
-          lecturer_id
-        `)
+          course_id,
+          lecturer_id,
+          slot
+        )
+      `) // Supabase сам создаст массив course_slots внутри каждого курса
+      .order('created_at', { ascending: false });
+
+    // 2. Фильтр для лектора
+    if (lecturerMode && currentUserIdRef.current) {
+      query = query.eq('lecturer_id', currentUserIdRef.current);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Courses fetch error:', error);
+      throw error;
+    }
+
+    console.log(`Courses loaded: ${data?.length || 0}`);
+    
+    // В консоли можно проверить, приходят ли слоты:
+    if (data && data.length > 0) {
+      console.log('Sample course slots:', data[0].course_slots);
+    }
+
+    setCourses(data || []);
+
+  } catch (e) {
+    console.error('fetchCourses error:', e);
+    throw e;
+  }
+}
+  async function fetchMyEnrollments() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+
+      const userId = session.user.id;
+      
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select('course_id, selected_slot')
+        .eq('student_id', userId);
+
+      if (error) {
+        console.error('Enrollments fetch error:', error);
+        return;
+      }
+
+      const rows = data || [];
+      setEnrolledCourseIds(new Set(rows.map((e: any) => e.course_id)));
+
+      const slots: Record<string, string> = {};
+      rows.forEach((e: any) => {
+        if (e.selected_slot) slots[e.course_id] = e.selected_slot;
+      });
+      setSelectedSlots(slots);
+      
+      console.log(`Loaded ${rows.length} enrollments`);
+      
+    } catch (err) {
+      console.error('fetchMyEnrollments error:', err);
+    }
+  }
+
+  async function fetchLecturers() {
+    try {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('role', 'lecturer');
+
+      if (profilesError) {
+        console.error('fetchLecturers profiles error:', profilesError);
+        return;
+      }
+
+      const { data: lecturersData, error: lecturersError } = await supabase
+        .from('lecturers')
+        .select('id, academic_title, bio, avatar_url');
+
+      if (lecturersError) {
+        console.error('fetchLecturers lecturers error:', lecturersError);
+      }
+
+      const map: Record<string, any> = {};
+      profilesData?.forEach((profile: any) => {
+        const lecturerInfo = lecturersData?.find((l: any) => l.id === profile.id);
+        map[profile.id] = {
+          full_name: profile.full_name || 'Преподаватель',
+          email: profile.email,
+          academic_title: lecturerInfo?.academic_title || '',
+          bio: lecturerInfo?.bio || '',
+          avatar_url: lecturerInfo?.avatar_url || null
+        };
+      });
+
+      setLecturersMap(map);
+      console.log(`Loaded ${Object.keys(map).length} lecturers`);
+      
+    } catch (err) {
+      console.error('fetchLecturers error:', err);
+    }
+  }
+
+  async function fetchProposals() {
+    try {
+      const { data, error } = await supabase
+        .from('slot_proposals')
+        .select('id, course_id, proposer_id, slot, status, created_at')
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('fetchCourses:', error);
-        Alert.alert("Ошибка", "Не удалось загрузить курсы");
-      } else {
-        setCourses(data || []);
-      }
-    } catch (e) {
-      console.error('fetchCourses unexpected error:', e);
-      Alert.alert("Ошибка", "Не удалось загрузить курсы");
-    }
-  }
-
-  async function fetchMyEnrollments() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const res = await supabase
-      .from('enrollments')
-      .select('course_id, selected_slot')
-      .eq('student_id', session.user.id);
-
-    let rows: any[] = [];
-    if (res.error?.message?.includes('selected_slot') || res.error?.code === '42703') {
-      const fallback = await supabase
-        .from('enrollments')
-        .select('course_id')
-        .eq('student_id', session.user.id);
-      if (fallback.error) {
-        console.error('fetchMyEnrollments fallback error:', JSON.stringify(fallback.error));
+        console.error('fetchProposals error:', error);
         return;
       }
-      rows = fallback.data || [];
-    } else if (res.error) {
-      console.error('fetchMyEnrollments error:', JSON.stringify(res.error));
-      return;
-    } else {
-      rows = res.data || [];
+      
+      setProposals(data || []);
+      console.log(`Loaded ${data?.length || 0} proposals`);
+      
+    } catch (err) {
+      console.error('fetchProposals error:', err);
     }
-
-    setEnrolledCourseIds(new Set(rows.map((e: any) => e.course_id)));
-
-    const slots: Record<string, string> = {};
-    rows.forEach((e: any) => {
-      if (e.selected_slot) slots[e.course_id] = e.selected_slot;
-    });
-    setSelectedSlots(slots);
-  }
-
-  // Загрузка преподавателей (id -> full_name)
-  async function fetchLecturers() {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, full_name');
-
-    if (error) {
-      console.error('fetchLecturers error:', error);
-      return;
-    }
-
-    const map: Record<string, string> = {};
-    data?.forEach((l: any) => {
-      map[l.id] = l.full_name;
-    });
-
-    setLecturersMap(map);
-  }
-
-  // Админ: загрузка предложений
-  async function fetchProposals() {
-    const { data, error } = await supabase
-      .from('slot_proposals')
-      .select('id, course_id, proposer_id, slot, status, created_at')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('fetchProposals error:', error);
-      return;
-    }
-    setProposals(data || []);
   }
 
   async function handleAdminAccess() {
     const role = await getUserRole();
-
     if (role === 'admin') {
       router.push('/admin');
     } else {
@@ -246,54 +285,54 @@ export default function CoursesScreen() {
   }
 
   function handleEnrollPress(course: any) {
-    if (enrolledCourseIds.has(course.id)) return;
-
-    if (!course.lecturer_id) {
-      Alert.alert("Запись недоступна", "На этот курс пока не назначен преподаватель.");
+    const slots = course.course_slots || [];
+    
+    if (slots.length === 0) {
+      if (course.lecturer_id) {
+        doEnroll(course.id, null, course.lecturer_id);
+      } else {
+        Alert.alert("Ошибка", "Нет доступных слотов для записи");
+      }
       return;
     }
 
-    const slots: string[] = course.available_slots || [];
-    if (slots.length > 0) {
-      setSlotModalCourse(course);
-    } else {
-      doEnroll(course.id, null);
+    if (slots.length === 1) {
+      const slot = slots[0];
+      doEnroll(course.id, slot.slot, slot.lecturer_id);
+      return;
     }
+
+    setSlotModalCourse(course);
   }
 
-  function handleSlotConfirm(slot: string) {
+  function handleSlotConfirm(slot: string, lecturerId?: string) {
     if (!slotModalCourse) return;
     const courseId = slotModalCourse.id;
+
     setSlotModalCourse(null);
-    doEnroll(courseId, slot);
+    doEnroll(courseId, slot, lecturerId);
   }
 
-  async function doEnroll(courseId: string, slot: string | null) {
+  async function doEnroll(courseId: string, slot: string | null, lecturerId?: string) {
     const userId = currentUserIdRef.current;
     if (!userId) {
-      Alert.alert("Ошибка", "Не удалось определить пользователя. Войдите снова.");
-      router.replace('/(auth)/login');
+      Alert.alert("Ошибка", "Пользователь не найден");
       return;
     }
 
     setEnrollingIds(prev => new Set(prev).add(courseId));
 
-    let err: any = null;
-    const r1 = await supabase.from('enrollments').insert({
+    const enrollmentData: any = {
       student_id: userId,
       course_id: courseId,
-      selected_slot: slot ?? null,
-    });
+    };
 
-    if (r1.error?.message?.includes('selected_slot') || r1.error?.code === '42703') {
-      const r2 = await supabase.from('enrollments').insert({
-        student_id: userId,
-        course_id: courseId,
-      });
-      err = r2.error;
-    } else {
-      err = r1.error;
-    }
+    if (slot) enrollmentData.selected_slot = slot;
+    if (lecturerId) enrollmentData.lecturer_id = lecturerId;
+
+    const { error } = await supabase
+      .from('enrollments')
+      .insert(enrollmentData);
 
     setEnrollingIds(prev => {
       const n = new Set(prev);
@@ -301,21 +340,21 @@ export default function CoursesScreen() {
       return n;
     });
 
-    if (err) {
-      console.error('doEnroll error:', JSON.stringify(err));
-      if (err.code === '23505') {
-        Alert.alert("Уже записаны", "Вы уже зарегистрированы на этот курс.");
-        setEnrolledCourseIds(prev => new Set(prev).add(courseId));
-      } else if (err.code === '42501' || err.message?.includes('policy')) {
-        Alert.alert("Доступ запрещён", `RLS заблокировал.\n\nКод: ${err.code}\n${err.message}\n\nВыполните rls_policies.sql в Supabase.`);
-      } else {
-        Alert.alert("Ошибка записи", `${err.code}: ${err.message}`);
-      }
+    if (error) {
+      console.error('Enrollment error:', error);
+      Alert.alert("Ошибка", error.message);
     } else {
+      // Обновляем список записанных курсов
       setEnrolledCourseIds(prev => new Set(prev).add(courseId));
-      if (slot) setSelectedSlots(prev => ({ ...prev, [courseId]: slot }));
-      const course = courses.find(c => c.id === courseId);
-      Alert.alert("Готово! ✓", `Вы записались на «${course?.title}».${slot ? `\nВремя: ${slot}` : ''}`);
+      if (slot) {
+        setSelectedSlots(prev => ({ ...prev, [courseId]: slot }));
+      }
+      
+      // Обновляем список курсов, чтобы обновить отображение слотов
+      const role = await getUserRole();
+      await fetchCourses(role);
+      
+      Alert.alert("Успешно", "Вы записаны на курс!");
     }
   }
 
@@ -329,7 +368,7 @@ export default function CoursesScreen() {
     }
 
     const userId = session.user.id;
-    const { error, data } = await supabase
+    const { error, data: delData } = await supabase
       .from('enrollments')
       .delete()
       .eq('student_id', userId)
@@ -337,9 +376,10 @@ export default function CoursesScreen() {
       .select();
 
     if (error) {
+      console.error('Unenroll error:', error);
       Alert.alert("Ошибка", error.message);
-    } else if (!data || data.length === 0) {
-      Alert.alert("Не удалилось", "Запись не найдена (или ты опять где-то накосячил)");
+    } else if (!delData || delData.length === 0) {
+      Alert.alert("Не удалилось", "Запись не найдена");
     } else {
       setEnrolledCourseIds(prev => {
         const n = new Set(prev);
@@ -351,7 +391,12 @@ export default function CoursesScreen() {
         delete n[courseId];
         return n;
       });
-      Alert.alert("Готово", "Удалено 🎉");
+      
+      // Обновляем список курсов
+      const role = await getUserRole();
+      await fetchCourses(role);
+      
+      Alert.alert("Готово", "Вы отписались от курса 🎉");
     }
   }
 
@@ -360,13 +405,11 @@ export default function CoursesScreen() {
     router.replace('/(auth)/login');
   };
 
-  // Преподаватель открывает модалку предложения времени
   function openProposeModal(course: any) {
     setNewSlotText('');
     setProposeModalCourse(course);
   }
 
-  // Подтверждение предложения времени — создаём запись в slot_proposals со статусом pending
   async function handleProposeConfirm() {
     if (!proposeModalCourse) return;
     const courseId = proposeModalCourse.id;
@@ -389,7 +432,7 @@ export default function CoursesScreen() {
 
     setProposingIds(prev => new Set(prev).add(courseId));
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('slot_proposals')
       .insert({
         course_id: courseId,
@@ -406,11 +449,7 @@ export default function CoursesScreen() {
 
     if (error) {
       console.error('createSlotProposal error:', error);
-      if (error.code === '42501' || error.message?.includes('policy')) {
-        Alert.alert("Доступ запрещён", `RLS заблокировал.\n\nКод: ${error.code}\n${error.message}`);
-      } else {
-        Alert.alert("Ошибка", "Не удалось отправить предложение");
-      }
+      Alert.alert("Ошибка", "Не удалось отправить предложение: " + error.message);
       return;
     }
 
@@ -418,7 +457,6 @@ export default function CoursesScreen() {
     if (isAdmin) await fetchProposals();
   }
 
-  // Админ: утвердить предложение — добавляем слот в courses.available_slots и обновляем статус proposal -> approved
   async function approveProposal(proposal: any) {
     const proposalId = proposal.id;
     const courseId = proposal.course_id;
@@ -427,48 +465,37 @@ export default function CoursesScreen() {
     setProcessingProposalIds(prev => new Set(prev).add(proposalId));
 
     try {
-      const { data: courseData, error: selErr } = await supabase
-        .from('courses')
-        .select('available_slots')
-        .eq('id', courseId)
-        .single();
+      const { error: slotError } = await supabase
+        .from('course_slots')
+        .insert({
+          course_id: courseId,
+          lecturer_id: proposal.proposer_id,
+          slot: slot
+        });
 
-      if (selErr) {
-        console.error('approveProposal fetch course error:', selErr);
-        Alert.alert("Ошибка", "Не удалось получить курс");
+      if (slotError) {
+        console.error('Error adding slot:', slotError);
+        Alert.alert("Ошибка", "Не удалось добавить слот в курс");
         return;
       }
 
-      const currentSlots: string[] = courseData?.available_slots || [];
-      if (!currentSlots.includes(slot)) {
-        const newSlots = [...currentSlots, slot];
-
-        const { error: updErr } = await supabase
-          .from('courses')
-          .update({ available_slots: newSlots })
-          .eq('id', courseId);
-
-        if (updErr) {
-          console.error('approveProposal update course error:', updErr);
-          Alert.alert("Ошибка", "Не удалось добавить слот в курс");
-          return;
-        }
-
-        setCourses(prev => prev.map(c => c.id === courseId ? { ...c, available_slots: newSlots } : c));
-      }
-
-      const { error: propErr } = await supabase
+      const { error: propError } = await supabase
         .from('slot_proposals')
         .update({ status: 'approved' })
         .eq('id', proposalId);
 
-      if (propErr) {
-        console.error('approveProposal update proposal error:', propErr);
+      if (propError) {
+        console.error('Error updating proposal:', propError);
         Alert.alert("Ошибка", "Не удалось обновить статус предложения");
         return;
       }
 
-      setProposals(prev => prev.map(p => p.id === proposalId ? { ...p, status: 'approved' } : p));
+      setProposals(prev => prev.map((p: any) => p.id === proposalId ? { ...p, status: 'approved' } : p));
+      
+      // Обновляем курсы
+      const role = await getUserRole();
+      await fetchCourses(role);
+      
       Alert.alert("Готово", "Предложение утверждено и опубликовано");
     } finally {
       setProcessingProposalIds(prev => {
@@ -479,7 +506,6 @@ export default function CoursesScreen() {
     }
   }
 
-  // Админ: отклонить предложение — обновляем статус proposal -> rejected
   async function rejectProposal(proposal: any) {
     const proposalId = proposal.id;
     setProcessingProposalIds(prev => new Set(prev).add(proposalId));
@@ -496,7 +522,7 @@ export default function CoursesScreen() {
         return;
       }
 
-      setProposals(prev => prev.map(p => p.id === proposalId ? { ...p, status: 'rejected' } : p));
+      setProposals(prev => prev.map((p: any) => p.id === proposalId ? { ...p, status: 'rejected' } : p));
       Alert.alert("Готово", "Предложение отклонено");
     } finally {
       setProcessingProposalIds(prev => {
@@ -507,13 +533,11 @@ export default function CoursesScreen() {
     }
   }
 
-  // Админ: открыть модалку предложений (и обновить список)
   async function openProposalsModal() {
     setProposalsModalVisible(true);
     await fetchProposals();
   }
 
-  // Красная кнопка удаления — появляется при свайпе влево
   function renderRightActions(courseId: string, progress: Animated.AnimatedInterpolation<number>) {
     const trans = progress.interpolate({
       inputRange: [0, 1],
@@ -537,12 +561,11 @@ export default function CoursesScreen() {
     const isEnrolled = enrolledCourseIds.has(item.id);
     const isEnrolling = enrollingIds.has(item.id);
     const hasLecturer = !!item.lecturer_id;
-    const slots: string[] = item.available_slots || [];
+    const slots = item.course_slots || [];
     const chosenSlot = selectedSlots[item.id];
 
-    // Получаем имя преподавателя из карты
-    const lecturerName = item.lecturer_id ? lecturersMap[item.lecturer_id] : null;
-
+    const lecturerInfo = item.lecturer_id ? lecturersMap[item.lecturer_id] : null;
+    const lecturerName = lecturerInfo?.full_name || null;
     const isCourseOwnedByCurrentLecturer = isLecturer && currentUserIdRef.current === item.lecturer_id;
 
     const cardContent = (
@@ -556,8 +579,12 @@ export default function CoursesScreen() {
           {hasLecturer ? (
             <View style={styles.lecturerBadge}>
               <Text style={styles.lecturerText}>
-                👤 {lecturerName || 'Преподаватель назначен'}
+                👤 {lecturerName || 'Преподаватель'}
               </Text>
+              {/* Исправлено: добавлено !! */}
+              {!!lecturerInfo?.academic_title && (
+                <Text style={styles.academicTitle}>{lecturerInfo.academic_title}</Text>
+              )}
             </View>
           ) : (
             <View style={[styles.lecturerBadge, styles.noLecturerBadge]}>
@@ -569,16 +596,17 @@ export default function CoursesScreen() {
             <View style={styles.slotsPreview}>
               <Text style={styles.slotsLabel}>Доступное время:</Text>
               <View style={styles.slotsList}>
-                {slots.map((slot, i) => (
+                {slots.map((slotObj: any, i: number) => (
                   <View key={i} style={styles.slotChip}>
-                    <Text style={styles.slotChipText}>{slot}</Text>
+                    <Text style={styles.slotChipText}>{slotObj.slot}</Text>
                   </View>
                 ))}
               </View>
             </View>
           )}
 
-          {isEnrolled && chosenSlot && (
+          {/* Исправлено: добавлено !! */}
+          {!!(isEnrolled && chosenSlot) && (
             <View style={styles.enrolledSlot}>
               <Text style={styles.enrolledSlotText}>🕐 Ваше время: {chosenSlot}</Text>
             </View>
@@ -669,6 +697,37 @@ export default function CoursesScreen() {
     return cardContent;
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const role = await getUserRole();
+      await loadAllData(role);
+    } catch (err) {
+      console.error('Refresh error:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Курсы</Text>
+          <TouchableOpacity onPress={handleSignOut} style={styles.logoutBtn}>
+            <Text style={styles.logoutBtnText}>Выйти</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={initializeScreen}>
+            <Text style={styles.retryBtnText}>Повторить</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -698,33 +757,44 @@ export default function CoursesScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderCourseItem}
           contentContainerStyle={styles.listContent}
-          ListEmptyComponent={<Text style={styles.emptyText}>Курсы не найдены.</Text>}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>Курсы не найдены.</Text>
+              <Text style={styles.emptySubtext}>
+                {isLecturer 
+                  ? 'Создайте свой первый курс в панели преподавателя' 
+                  : 'Скоро здесь появятся новые курсы'}
+              </Text>
+            </View>
+          }
         />
       )}
 
-      {/* МОДАЛКИ (slot selection, propose, proposals) — как в предыдущей версии */}
-      <Modal
-        visible={!!slotModalCourse}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSlotModalCourse(null)}
-      >
+      <Modal visible={!!slotModalCourse} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.slotModalContent}>
-            <Text style={styles.modalTitle}>Выберите время</Text>
-            {slotModalCourse && (
-              <Text style={styles.slotModalSubtitle}>{slotModalCourse.title}</Text>
-            )}
-            {(slotModalCourse?.available_slots || []).map((slot: string, i: number) => (
+            <Text style={styles.modalTitle}>Записаться</Text>
+            <Text style={styles.modalSubtitle}>{slotModalCourse?.title}</Text>
+
+            <Text style={{ marginTop: 16, fontWeight: 'bold', marginBottom: 8 }}>
+              Доступные слоты:
+            </Text>
+
+            {(slotModalCourse?.course_slots || []).map((slotObj: any) => (
               <TouchableOpacity
-                key={i}
+                key={slotObj.id}
                 style={styles.slotOption}
-                onPress={() => handleSlotConfirm(slot)}
+                onPress={() => handleSlotConfirm(slotObj.slot, slotObj.lecturer_id)}
               >
-                <Text style={styles.slotOptionText}>{slot}</Text>
+                <View>
+                  <Text style={styles.slotOptionText}>{slotObj.slot}</Text>
+                </View>
                 <Text style={styles.slotOptionArrow}>→</Text>
               </TouchableOpacity>
             ))}
+
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setSlotModalCourse(null)}>
               <Text style={styles.cancelBtnText}>Отмена</Text>
             </TouchableOpacity>
@@ -742,20 +812,13 @@ export default function CoursesScreen() {
           <View style={styles.slotModalContent}>
             <Text style={styles.modalTitle}>Предложить время</Text>
             {proposeModalCourse && (
-              <Text style={styles.slotModalSubtitle}>{proposeModalCourse.title}</Text>
+              <Text style={styles.modalSubtitle}>{proposeModalCourse.title}</Text>
             )}
             <TextInput
               value={newSlotText}
               onChangeText={setNewSlotText}
               placeholder="Например: Пн 18:00"
-              style={{
-                borderWidth: 1,
-                borderColor: '#E5E5EA',
-                borderRadius: 10,
-                padding: 12,
-                marginBottom: 12,
-                fontSize: 16,
-              }}
+              style={styles.input}
             />
             <TouchableOpacity style={[styles.enrollBtn, { marginBottom: 8 }]} onPress={handleProposeConfirm}>
               <Text style={styles.enrollBtnText}>Отправить предложение</Text>
@@ -776,7 +839,7 @@ export default function CoursesScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.slotModalContent, { maxHeight: '80%' }]}>
             <Text style={styles.modalTitle}>Предложения времени</Text>
-            <Text style={{ textAlign: 'center', color: '#888', marginBottom: 12 }}>
+            <Text style={styles.modalSubtitle}>
               Здесь админ может утвердить или отклонить предложения преподавателей
             </Text>
 
@@ -784,96 +847,71 @@ export default function CoursesScreen() {
               data={proposals}
               keyExtractor={(p) => p.id}
               renderItem={({ item }) => (
-  <View style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#EEE' }}>
-    {/* Заголовок — слот */}
-    <Text style={{ fontWeight: '700', fontSize: 16 }}>{item.slot}</Text>
-    
-    {/* Инфо о курсе и преподавателе */}
-    {isLecturer && (
-      <Text style={{ color: '#888', fontSize: 13 }}>
-        От: {lecturersMap[item.proposer_id] || item.proposer_id}
-      </Text>
-    )}
-    
-    {!isLecturer && isAdmin && (
-      <View>
-        <Text style={{ color: '#666', fontSize: 14, marginTop: 2 }}>
-          Курс ID: <Text style={{ fontWeight: '500' }}>{item.course_id}</Text>
-        </Text>
-        <Text style={{ color: '#666', fontSize: 14 }}>
-          Преподаватель ID: <Text style={{ fontWeight: '500' }}>{item.proposer_id}</Text>
-        </Text>
-        
-        {/* Если есть имя преподавателя, можно подтянуть его через lecturersMap */}
-        {lecturersMap[item.proposer_id] && (
-          <Text style={{ color: '#888', fontSize: 13, marginTop: 2 }}>
-            👤 {lecturersMap[item.proposer_id]}
-          </Text>
-        )}
-      </View>
-    )}
+                <View style={styles.proposalItem}>
+                  <Text style={styles.proposalSlot}>{item.slot}</Text>
 
-    {/* Статус */}
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-      <Text>Статус:</Text>
-      <Text
-        style={{
-          fontWeight: '600',
-          color: item.status === 'pending' ? '#FF3B30'
-            : item.status === 'approved' ? '#34C759'
-            : '#8E8E93'
-        }}
-      >
-        {item.status}
-      </Text>
-    </View>
+                  <View style={styles.proposalDetails}>
+                    <Text style={styles.proposalText}>
+                      Курс ID: {item.course_id.slice(0, 8)}...
+                    </Text>
+                    <Text style={styles.proposalText}>
+                      Преподаватель: {lecturersMap[item.proposer_id]?.full_name || item.proposer_id.slice(0, 8)}
+                    </Text>
+                  </View>
 
-    {/* Кнопки управления */}
-    <View style={{ flexDirection: 'row', marginTop: 10 }}>
-      {item.status === 'pending' && (
-        <>
-          <TouchableOpacity
-            style={[styles.enrollBtn, { marginRight: 8 }]}
-            onPress={() => approveProposal(item)}
-            disabled={processingProposalIds.has(item.id)}
-          >
-            {processingProposalIds.has(item.id) ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.enrollBtnText}>Утвердить</Text>
-            )}
-          </TouchableOpacity>
+                  <View style={styles.proposalStatus}>
+                    <Text>Статус: </Text>
+                    <Text
+                      style={[
+                        styles.statusText,
+                        item.status === 'pending' && styles.statusPending,
+                        item.status === 'approved' && styles.statusApproved,
+                        item.status === 'rejected' && styles.statusRejected,
+                      ]}
+                    >
+                      {item.status === 'pending' ? 'На рассмотрении' :
+                       item.status === 'approved' ? 'Утверждено' : 'Отклонено'}
+                    </Text>
+                  </View>
 
-          <TouchableOpacity
-            style={[styles.cancelBtn, { justifyContent: 'center' }]}
-            onPress={() => rejectProposal(item)}
-            disabled={processingProposalIds.has(item.id)}
-          >
-            {processingProposalIds.has(item.id) ? (
-              <ActivityIndicator color="#000" />
-            ) : (
-              <Text style={styles.cancelBtnText}>Отклонить</Text>
-            )}
-          </TouchableOpacity>
-        </>
-      )}
+                  {item.status === 'pending' && (
+                    <View style={styles.proposalActions}>
+                      <TouchableOpacity
+                        style={[styles.approveBtn, processingProposalIds.has(item.id) && styles.disabledBtn]}
+                        onPress={() => approveProposal(item)}
+                        disabled={processingProposalIds.has(item.id)}
+                      >
+                        {processingProposalIds.has(item.id) ? (
+                          <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                          <Text style={styles.approveBtnText}>✓ Утвердить</Text>
+                        )}
+                      </TouchableOpacity>
 
-      {/* Для approved/rejected — просто кнопка закрытия или nothing */}
-      {item.status !== 'pending' && (
-        <View style={{ paddingVertical: 4, paddingHorizontal: 8 }}>
-          <Text style={{ fontSize: 12, color: '#888', fontStyle: 'italic' }}>
-            {item.status === 'approved' ? '✅ Утверждено' : '❌ Отклонено'}
-          </Text>
-        </View>
-      )}
-    </View>
-  </View>
-)}
-
-              ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20 }}>Нет предложений</Text>}
+                      <TouchableOpacity
+                        style={[styles.rejectBtn, processingProposalIds.has(item.id) && styles.disabledBtn]}
+                        onPress={() => rejectProposal(item)}
+                        disabled={processingProposalIds.has(item.id)}
+                      >
+                        {processingProposalIds.has(item.id) ? (
+                          <ActivityIndicator color="#000" size="small" />
+                        ) : (
+                          <Text style={styles.rejectBtnText}>✗ Отклонить</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
+              ListEmptyComponent={
+                <Text style={styles.emptyProposalsText}>Нет предложений</Text>
+              }
             />
 
-            <TouchableOpacity style={[styles.cancelBtn, { marginTop: 12 }]} onPress={() => setProposalsModalVisible(false)}>
+            <TouchableOpacity 
+              style={[styles.cancelBtn, { marginTop: 12 }]} 
+              onPress={() => setProposalsModalVisible(false)}
+            >
               <Text style={styles.cancelBtnText}>Закрыть</Text>
             </TouchableOpacity>
           </View>
@@ -971,6 +1009,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
+  academicTitle: {
+    color: '#8E8E93',
+    fontSize: 11,
+    marginTop: 2,
+  },
   noLecturerBadge: {
     backgroundColor: '#FFF3E0',
   },
@@ -990,7 +1033,6 @@ const styles = StyleSheet.create({
   slotsList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
   },
   slotChip: {
     backgroundColor: '#E8F4FD',
@@ -1064,7 +1106,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  // Свайп
   swipeAction: {
     justifyContent: 'center',
     marginBottom: 20,
@@ -1088,10 +1129,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+  },
   emptyText: {
     textAlign: 'center',
-    marginTop: 50,
     color: '#999',
+    fontSize: 16,
+  },
+  emptySubtext: {
+    textAlign: 'center',
+    color: '#C7C7CC',
+    fontSize: 14,
+    marginTop: 8,
   },
   modalOverlay: {
     flex: 1,
@@ -1111,11 +1163,19 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     textAlign: 'center',
   },
-  slotModalSubtitle: {
+  modalSubtitle: {
     fontSize: 14,
     color: '#888',
     textAlign: 'center',
     marginBottom: 20,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    fontSize: 16,
   },
   slotOption: {
     flexDirection: 'row',
@@ -1146,5 +1206,97 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     fontWeight: '600',
     color: '#3C3C43',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#FF3B30',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryBtn: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  retryBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  proposalItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+  },
+  proposalSlot: {
+    fontWeight: '700',
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  proposalDetails: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  proposalText: {
+    color: '#666',
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  proposalStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  statusText: {
+    fontWeight: '600',
+  },
+  statusPending: {
+    color: '#FF3B30',
+  },
+  statusApproved: {
+    color: '#34C759',
+  },
+  statusRejected: {
+    color: '#8E8E93',
+  },
+  proposalActions: {
+    flexDirection: 'row',
+    marginTop: 8,
+  },
+  approveBtn: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  approveBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  rejectBtn: {
+    backgroundColor: '#FF3B30',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  rejectBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  disabledBtn: {
+    opacity: 0.6,
+  },
+  emptyProposalsText: {
+    textAlign: 'center',
+    marginTop: 20,
+    color: '#999',
   },
 });
