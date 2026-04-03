@@ -1,15 +1,15 @@
-import { useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import LecturerCard from '../../../app/components/LecturerCard';
-import { supabase } from '../../../src/supabase/supabaseClient';
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import LecturerCard from "../../../app/components/LecturerCard";
+import { supabase } from "../../../src/supabase/supabaseClient";
 
 export default function CourseSlotsScreen() {
   const { id } = useLocalSearchParams();
@@ -27,8 +27,9 @@ export default function CourseSlotsScreen() {
     setLoading(true);
 
     const { data, error } = await supabase
-      .from('course_slots')
-      .select(`
+      .from("course_slots")
+      .select(
+        `
         id,
         slot,
         course:courses (
@@ -44,8 +45,9 @@ export default function CourseSlotsScreen() {
             full_name
           )
         )
-      `)
-      .eq('course_id', courseId);
+      `,
+      )
+      .eq("course_id", courseId);
 
     if (error) {
       console.error(error);
@@ -72,22 +74,31 @@ export default function CourseSlotsScreen() {
   }
 
   const filteredSlots = selectedLecturer
-    ? slots.filter(s => s.lecturer?.id === selectedLecturer)
+    ? slots.filter((s) => s.lecturer?.id === selectedLecturer)
     : slots;
 
-  async function enroll(slotId: string) {
-    const user = await supabase.auth.getUser();
+  async function enroll(slotId: string, lecturerId: string) {
+    // Додали другий аргумент
+    const { data: authData } = await supabase.auth.getUser();
+    const user = authData.user;
 
-    const { error } = await supabase.from('enrollments').insert({
-      student_id: user.data.user?.id,
+    if (!user) {
+      alert("Потрібно увійти в систему");
+      return;
+    }
+
+    const { error } = await supabase.from("enrollments").insert({
+      student_id: user.id,
       course_id: courseId,
       course_slot_id: slotId,
+      lecturer_id: lecturerId, // ТЕПЕР МИ ЗБЕРІГАЄМО І ЛЕКТОРА
     });
 
     if (error) {
-      console.error(error);
+      console.error("Enroll error:", error.message);
+      alert("Помилка при записі");
     } else {
-      alert('Записан, поздравляю, теперь пути назад нет ;)');
+      alert("Записан, поздравляю, теперь пути назад нет ;)");
     }
   }
 
@@ -100,7 +111,8 @@ export default function CourseSlotsScreen() {
 
         <TouchableOpacity
           style={styles.button}
-          onPress={() => enroll(item.id)}
+          // Передаємо item.id (це slotId) ТА item.lecturer.id (це lecturerId)
+          onPress={() => enroll(item.id, item.lecturer.id)}
         >
           <Text style={styles.buttonText}>Записаться</Text>
         </TouchableOpacity>
@@ -109,7 +121,7 @@ export default function CourseSlotsScreen() {
   }
 
   const lecturersUnique = Array.from(
-    new Map(slots.map(s => [s.lecturer.id, s.lecturer])).values()
+    new Map(slots.map((s) => [s.lecturer.id, s.lecturer])).values(),
   );
 
   if (loading) {
@@ -129,9 +141,7 @@ export default function CourseSlotsScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() =>
-              setSelectedLecturer(
-                selectedLecturer === item.id ? null : item.id
-              )
+              setSelectedLecturer(selectedLecturer === item.id ? null : item.id)
             }
             style={[
               styles.filterBtn,
@@ -155,43 +165,43 @@ export default function CourseSlotsScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     flex: 1,
   },
   title: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 12,
   },
   slotCard: {
     marginBottom: 16,
     padding: 12,
-    backgroundColor: '#F7F7FA',
+    backgroundColor: "#F7F7FA",
     borderRadius: 12,
   },
   slotText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 8,
   },
   button: {
     marginTop: 10,
-    backgroundColor: '#007AFF',
+    backgroundColor: "#007AFF",
     padding: 10,
     borderRadius: 10,
   },
   buttonText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: '600',
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "600",
   },
   filterBtn: {
     padding: 8,
-    backgroundColor: '#eee',
+    backgroundColor: "#eee",
     borderRadius: 8,
     marginRight: 8,
   },
   filterActive: {
-    backgroundColor: '#c7c7ff',
+    backgroundColor: "#c7c7ff",
   },
 });
