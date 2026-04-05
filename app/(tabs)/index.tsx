@@ -372,8 +372,59 @@ export default function CoursesScreen() {
   const [newSlotText, setNewSlotText] = useState('');
   const [proposalsModalVisible, setProposalsModalVisible] = useState(false);
 
-  useEffect(() => { initialize(); }, [initialize]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredCourses, setFilteredCourses] = useState<Course[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
+  useEffect(() => { initialize(); }, [initialize]);
+  useEffect(() => {
+  if (!searchQuery.trim()) {
+    setFilteredCourses(courses);
+    setSuggestions([]);
+    return;
+  }
+
+  const q = searchQuery.toLowerCase();
+
+  const filtered = courses.filter(course => {
+    const lecturer = course.lecturer_id
+      ? lecturersMap[course.lecturer_id]
+      : null;
+
+    return (
+      course.title.toLowerCase().includes(q) ||
+      lecturer?.academic_title?.toLowerCase().includes(q) ||
+      lecturer?.full_name?.toLowerCase().includes(q)
+    );
+  });
+
+  setFilteredCourses(filtered);
+
+  // 🔥 suggestions
+  const suggSet = new Set<string>();
+
+    courses.forEach(course => {
+      if (course.title.toLowerCase().includes(q)) {
+        suggSet.add(course.title);
+      }
+
+      const lecturer = course.lecturer_id
+        ? lecturersMap[course.lecturer_id]
+        : null;
+
+      if (lecturer?.full_name?.toLowerCase().includes(q)) {
+        suggSet.add(lecturer.full_name);
+      }
+
+      if (lecturer?.academic_title?.toLowerCase().includes(q)) {
+        suggSet.add(lecturer.academic_title);
+      }
+    });
+
+    setSuggestions(Array.from(suggSet).slice(0, 5));
+  }, [searchQuery, courses, lecturersMap]);
+    
+  
   // ── handlers ──────────────────────────────────────────────────────────────
 
   const handleSignOut = useCallback(async () => {
@@ -535,11 +586,37 @@ export default function CoursesScreen() {
         onOpenProposals={openProposalsModal}
       />
 
+      {/* 🔍 ДОДАЙТЕ ЦЕЙ БЛОК СЮДИ */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          placeholder="Пошук курсів або викладачів..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          style={styles.searchInput}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Text style={styles.clearBtn}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Підказки пошуку */}
+      {suggestions.length > 0 && (
+        <View style={styles.suggestionsBox}>
+          {suggestions.map((s, i) => (
+            <TouchableOpacity key={i} onPress={() => setSearchQuery(s)}>
+              <Text style={styles.suggestionItem}>{s}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       {loading ? (
         <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 50 }} />
       ) : (
         <FlatList
-          data={courses}
+          data={searchQuery ? filteredCourses : courses}
           keyExtractor={item => item.id}
           renderItem={renderCourseItem}
           contentContainerStyle={styles.listContent}
@@ -547,11 +624,8 @@ export default function CoursesScreen() {
           onRefresh={refresh}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Курсы не найдены.</Text>
-              <Text style={styles.emptySubtext}>
-                {role === 'lecturer'
-                  ? 'Создайте свой первый курс в панели преподавателя'
-                  : 'Скоро здесь появятся новые курсы'}
+              <Text style={styles.emptyText}>
+                {searchQuery ? "Нічого не знайдено за вашим запитом." : "Курсы не найдены."}
               </Text>
             </View>
           }
@@ -691,4 +765,76 @@ const styles = StyleSheet.create({
   rejectBtnText:     { color: '#fff', fontWeight: '600' },
   disabledBtn:       { opacity: 0.6 },
   emptyProposalsText:{ textAlign: 'center', marginTop: 20, color: '#999' },
+    searchContainer: {
+
+  flexDirection: 'row',
+
+  alignItems: 'center',
+
+  backgroundColor: '#fff',
+
+  marginHorizontal: 20,
+
+  marginTop: 10,
+
+  borderRadius: 12,
+
+  paddingHorizontal: 12,
+
+  },
+
+
+
+  searchInput: {
+
+    flex: 1,
+
+    paddingVertical: 10,
+
+    fontSize: 16,
+
+  },
+
+
+
+  clearBtn: {
+
+    fontSize: 18,
+
+    color: '#999',
+
+    paddingHorizontal: 8,
+
+  },
+
+
+
+  suggestionsBox: {
+
+    backgroundColor: '#fff',
+
+    marginHorizontal: 20,
+
+    borderRadius: 12,
+
+    marginTop: 5,
+
+    paddingVertical: 5,
+
+  },
+
+
+
+  suggestionItem: {
+
+    padding: 10,
+
+    fontSize: 14,
+
+    borderBottomWidth: 1,
+
+    borderBottomColor: '#eee',
+
+  },
+
 });
