@@ -50,7 +50,7 @@ export default function LecturerCard({ lecturer }: LecturerProps) {
       activeOpacity={0.7}
     >
       <Image
-        source={{ uri: getAvatarUrl(lecturer?.avatar_url) }} // МАЄ БУТИ ТАК
+        source={{ uri: getAvatarUrl(lecturer?.avatar_url) }}
         style={styles.avatar}
       />
 
@@ -58,68 +58,58 @@ export default function LecturerCard({ lecturer }: LecturerProps) {
         {!!lecturer?.academic_title && (
           <Text style={styles.title}>{lecturer.academic_title}</Text>
         )}
-        <Text style={styles.name}>{lecturer?.full_name || "Без імені"}</Text>
-
-        {!!lecturer?.bio && (
-          <Text numberOfLines={2} style={styles.bio}>
-            {lecturer.bio}
-          </Text>
-        )}
+        <Text style={styles.name} numberOfLines={1}>
+          {lecturer?.full_name || "Без імені"}
+        </Text>
       </View>
-
-      <Text style={styles.chevron}>›</Text>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: "row",
-    backgroundColor: "#F0EEFF",
-    padding: 14,
+    width: "31%",
+    aspectRatio: 0.9,
+    backgroundColor: "#e7e7e7",
     borderRadius: 20,
+    padding: 12,
+    margin: "1.1%",
+
     alignItems: "center",
-    marginBottom: 12,
-    // Додамо трохи тіні для об'єму
+    justifyContent: "center",
+
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
   },
+
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#E5E5EA",
+    width: 500,
+    height: 500,
+    borderRadius: 10,
+    backgroundColor: "#e5e5eab9",
+    marginBottom: 12,
   },
+
   info: {
-    flex: 1,
-    marginLeft: 16,
+    alignItems: "center",
   },
+
   title: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#5856D6",
+    fontSize: 40,
+    fontWeight: "600",
+    color: "#6C5CE7",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 2,
   },
+
   name: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 30,
+    fontWeight: "800",
     color: "#1C1C1E",
-  },
-  bio: {
-    fontSize: 13,
-    color: "#636366",
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  chevron: {
-    color: "#C7C7CC",
-    fontSize: 28,
-    marginLeft: 8,
-    fontWeight: "300",
+    textAlign: "center",
   },
 });
