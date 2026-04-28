@@ -221,23 +221,23 @@ Wykorzystywane są:
 ## 13. Zrzuty ekranu
 
 - login
-![Login](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/main/screenshots/login.png)
+![Login](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/refactor/global-ui-optimization/screenshots/login.png)
 - register
-![Register](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/main/screenshots/register.png)
+![Register](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/refactor/global-ui-optimization/screenshots/register.png)
 - courses
-![Courses](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/main/screenshots/courses.png)
+![Courses](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/refactor/global-ui-optimization/screenshots/courses.png)
 - courses-proposals
-![Proposals](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/main/screenshots/proposals.png)
+![Proposals](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/refactor/global-ui-optimization/screenshots/proposals.png)
 - courses-chosetime
-![Choose time](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/main/screenshots/chosetime.png)
+![Choose time](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/refactor/global-ui-optimization/screenshots/chosetime.png)
 - lecturers/index
-![Lecturers](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/main/screenshots/lecturersindex.png)
+![Lecturers](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/refactor/global-ui-optimization/screenshots/lecturersindex.png)
 - profile
-![Profile](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/main/screenshots/profile.png)
+![Profile](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/refactor/global-ui-optimization/screenshots/profile.png)
 - admin
-![Admin](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/main/screenshots/admin.png)
+![Admin](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/refactor/global-ui-optimization/screenshots/admin.png)
 - admin-manage
-![Manage courses](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/main/screenshots/managecourses.png)
+![Manage](https://raw.githubusercontent.com/zaxa651/zapisy_na_wyzszych/refactor/global-ui-optimization/screenshots/managecourses.png)
 
 ---
 
