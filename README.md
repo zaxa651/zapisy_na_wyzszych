@@ -96,12 +96,12 @@ Inne:
 - testowanie i optymalizacja aplikacji
 
 Checklist:
-- [+] autoryzacja
-- [+] baza danych
-- [+] system kursów
-- [+] panel admina
-- [+] wyszukiwarka
-- [ ] finalne testy i optymalizacja
+[+] autoryzacja
+[+] baza danych
+[+] system kursów
+[+] panel admina
+[+] wyszukiwarka
+[-] finalne testy i optymalizacja
 
 ---
 
