@@ -1,20 +1,19 @@
-Struktura README.md projektu
+Struktura README.md rojektu
 
-1. Tytuł projektu
-2. Opis projektu
-3. Sprint plan
-4. Autorzy
-5. Technologie
-6. Funkcjonalności
-7. Architektura projektu
-8. Instalacja
-9. Uruchomienie aplikacji
-10. Instrukcja użytkownika
-11. Struktura repozytorium
-12. API
-13. Zrzuty ekranu
-14. Status projektu
-15. Licencja
+1. System zarządzania kursami	1
+2. Opis projektu	1
+3. Sprint plan	1
+4. Autorzy	1
+5. Technologie	2
+6. Funkcjonalności	2
+7. Architektura projektu	3
+8. Instalacja	3
+9. Uruchomienie aplikacji	3
+10. Instrukcja użytkownika	4
+11. Struktura repozytorium	4
+13. Zrzuty ekranu	5
+14. Status projektu	6
+14. Licencja	6
 
  
 1. System zarządzania kursami
@@ -78,12 +77,12 @@ Inne:
 •	testowanie i optymalizacja aplikacji
 
 Checklist:
-✔ autoryzacja
-✔ baza danych
-✔ system kursów
-✔ panel admina
-✔ wyszukiwarka
-✖️ finalne testy i optymalizacja
+[+] autoryzacja
+[+] baza danych
+[+] system kursów
+[+] panel admina
+[+] wyszukiwarka
+[] finalne testy i optymalizacja
  
 7. Architektura projektu
 Aplikacja została zaprojektowana w architekturze klient–serwer. Klientem jest aplikacja mobilna (frontend), natomiast backend jest realizowany z wykorzystaniem platformy Supabase, która udostępnia gotowe API do komunikacji z bazą danych oraz obsługi autoryzacji.
@@ -188,7 +187,7 @@ admin
 admin-manage
 ![image alt](https://github.com/zaxa651/zapisy_na_wyzszych/blob/104717f8609a63832aeb6886b9348e63a974de86/screenshots/managecourses.png)
 
-15. Status projektu
+14. Status projektu
 Projekt w trakcie rozwoju.
 
 14. Licencja
