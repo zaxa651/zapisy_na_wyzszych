@@ -46,14 +46,12 @@ Aplikacja jest przeznaczona dla:
 ## 3. Sprint plan
 
 | № Sprintu | Zadanie | Data |
-|----------|--------|------|
-| 1 | Architektura projektu + UI autoryzacji | 01.03.2026 |
-| 2 | Baza danych + Supabase Auth | 15.03.2026 |
-| 3 | Logika autoryzacji i rejestracji | 22.03.2026 |
-| 4 | System kursów i zapisów | 31.03.2026 |
-| 5 | Panel administratora + zarządzanie ofertą | 12.04.2026 |
-| 6 | Wyszukiwarka + system sugestii | 14.04.2026 |
-| 7 | Testowanie, refactoring i optymalizacja | 05.05.2026 |
+|----------|----------|------|
+| 1 | Architektura aplikacji, baza danych i UI autoryzacji | 08.03.2026 – 21.03.2026 |
+| 2 | Implementacja logiki autoryzacji i integracja z Supabase Auth | 22.03.2026 – 04.04.2026 |
+| 3 | System zapisów na kursy oraz wybór prowadzącego | 05.04.2026 – 18.04.2026 |
+| 4 | Panel administratora, wyszukiwarka i zarządzanie ofertą | 19.04.2026 – 02.05.2026 |
+| 5 | Dokumentacja, testowanie, refaktoryzacja i optymalizacja UI/UX | 03.05.2026 – 16.05.2026 |
 
 ---
 
